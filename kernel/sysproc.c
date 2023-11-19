@@ -5,6 +5,8 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "history.h"
+#include "top.h"
 
 uint64
 sys_exit(void)
@@ -88,4 +90,20 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+uint64
+sys_history(int history_index)
+{
+    argint(0, &history_index);
+    history(history_index);
+    return 0;
+
+}
+
+uint64
+sys_top(void)
+{
+    top(sys_uptime());
+    return 0;
 }

@@ -105,3 +105,13 @@ uptime:
  li a7, SYS_uptime
  ecall
  ret
+.global history
+history:
+ li a7, SYS_history
+ ecall
+ ret
+.global top
+top:
+ li a7, SYS_top
+ ecall
+ ret

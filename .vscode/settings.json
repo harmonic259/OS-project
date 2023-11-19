@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "top.h": "c",
+        "history.h": "c"
+    },
+    "files.autoSave": "afterDelay"
+}

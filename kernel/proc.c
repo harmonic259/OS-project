@@ -5,6 +5,9 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "history.h"
+#include "top.h"
+
 
 struct cpu cpus[NCPU];
 
@@ -680,4 +683,103 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+void
+history(int history_index) {
+    int index = (historyBuffer.lastCommandIndex - history_index - 1) % MAX_HISTORY;
+    if (index < 0) {
+        index += MAX_HISTORY;
+    }
+    if (index < 0 || index > historyBuffer.numOfCommandsInMem - 1 || history_index > 15) {
+        printf("Index out of range!\n");
+
+    } else {
+        for (int j = 0; j < historyBuffer.numOfCommandsInMem; j++) {
+            int t_index = (historyBuffer.lastCommandIndex - j - 1) % MAX_HISTORY;
+            if (t_index < 0) {
+                t_index += MAX_HISTORY;
+            }
+            for (int i = 0; i < historyBuffer.lengthArr[t_index]; i++) {
+                consputc(historyBuffer.bufferArr[t_index][i]);
+            }
+            printf("\n");
+        }
+        printf("requested command: ");
+        for (int i = 0; i < historyBuffer.lengthArr[index]; i++) {
+            consputc(historyBuffer.bufferArr[index][i]);
+        }
+        printf("\n");
+    }
+
+}
+
+void
+top(uint64 upt) {
+    
+
+    static char *states[] = {
+    [UNUSED]    "unused",
+    [USED]      "used",
+    [SLEEPING]  "sleep ",
+    [RUNNABLE]  "runble",
+    [RUNNING]   "run   ",
+    [ZOMBIE]    "zombie"
+  };
+    struct proc *p;
+    char *state;
+    struct top t;
+
+    t.total_process = 0;
+    t.running_process = 0;
+    t.sleeping_process = 0;
+
+    int index = 0;
+    for (p = proc; p < &proc[NPROC]; p++) {
+        if (p->state == UNUSED) {
+            continue;
+        }
+
+        // assigning the name of process with current index in the top struct char by char
+        for (int j = 0; j < 16; j++) {
+            t.p_list[index].name[j] = p->name[j];
+            if (p->name[j] == '\0')
+                break;
+        }
+        
+
+        t.p_list[index].pid = p->pid;
+
+        if (index != 0) {
+            t.p_list[index].ppid = p->parent->pid;
+        } else {
+            t.p_list[index].ppid = 0;
+        }
+        t.p_list[index].state = p->state;
+
+
+        
+        t.total_process++;
+        if (p->state == RUNNING)
+            t.running_process++;
+        else if (p->state == SLEEPING)
+            t.sleeping_process++;
+        index++;
+    }
+
+    printf("uptime:%d ticks\n", upt);
+    printf("total process:%d\n", t.total_process);
+    printf("running process:%d\n", t.running_process);
+    printf("sleeping process:%d\n", t.sleeping_process);
+    printf("name    PID     PPID    state\n");
+    for (int i = 0; i < t.total_process; i++) {
+        for (int j = 0; j < 16; j++) {
+            if (t.p_list[i].name[j] == '\0')
+                break;
+            consputc(t.p_list[i].name[j]);
+        }
+        printf("    %d    %d    ", t.p_list[i].pid, t.p_list[i].ppid);
+        state = states[t.p_list[i].state];
+        printf("%s\n", state);
+    }
 }

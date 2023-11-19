@@ -21,6 +21,7 @@
 #include "riscv.h"
 #include "defs.h"
 #include "proc.h"
+#include "history.h"
 
 #define BACKSPACE 0x100
 #define C(x)  ((x)-'@')  // Control-x
@@ -51,6 +52,38 @@ struct {
   uint w;  // Write index
   uint e;  // Edit index
 } cons;
+
+int hist_index = -1;
+int commandLength;
+struct historyBufferArray historyBuffer;
+
+
+void saveCommand() {
+    char historyCommand[8] = {'h', 'i', 's', 't', 'o', 'r', 'y', '\0'};
+    commandLength--;
+    int isHistory = 1;
+    for (int i = 0; i < 7; i++) {
+        if (historyBuffer.currentCommand[i] != historyCommand[i]) {
+            isHistory = 0;
+            break;
+        }
+    }
+
+    if (isHistory == 0) {
+        for (int i = 0; i < commandLength; i++) {
+            historyBuffer.bufferArr[historyBuffer.lastCommandIndex][i] = historyBuffer.currentCommand[i];
+        }
+        historyBuffer.lengthArr[historyBuffer.lastCommandIndex] = commandLength;
+        historyBuffer.numOfCommandsInMem++;
+        if (historyBuffer.numOfCommandsInMem > 16)
+            historyBuffer.numOfCommandsInMem = 16;
+        historyBuffer.lastCommandIndex = (historyBuffer.lastCommandIndex + 1) % MAX_HISTORY;
+    }
+
+    commandLength = 0;
+
+
+}
 
 //
 // user write()s to the console go here.
@@ -136,11 +169,62 @@ void
 consoleintr(int c)
 {
   acquire(&cons.lock);
+  int index = 0;
 
   switch(c){
   case C('P'):  // Print process list.
     procdump();
     break;
+  case C('Y'): //pgdn
+      while (cons.e != cons.w &&
+              cons.buf[(cons.e - 1) % INPUT_BUF] != '\n') {
+          cons.e--;
+          consputc(BACKSPACE);
+      }
+      hist_index--;
+      index = (historyBuffer.lastCommandIndex - hist_index - 1) % MAX_HISTORY;
+      if (index < 0) {
+          index += MAX_HISTORY;
+      }
+      if (index < 0 || index > historyBuffer.numOfCommandsInMem - 1 || hist_index > 15) {
+          hist_index = -1;
+          break;
+      }
+      for (int i = 0; i < historyBuffer.lengthArr[index]; i++) {
+          int cc = historyBuffer.bufferArr[index][i];
+          cc = (cc == '\r') ? '\n' : cc;
+          cons.buf[cons.e++ % INPUT_BUF] = cc;
+          consputc(cc);
+          historyBuffer.currentCommand[commandLength] = cc;
+          commandLength++;
+      }
+      break;
+  case C('X'): //pgup
+      while (cons.e != cons.w &&
+              cons.buf[(cons.e - 1) % INPUT_BUF] != '\n') {
+          cons.e--;
+          consputc(BACKSPACE);
+      }
+      hist_index++;
+      index = (historyBuffer.lastCommandIndex - hist_index - 1) % MAX_HISTORY;
+      if (index < 0) {
+          index += MAX_HISTORY;
+      }
+      if (index < 0 || index > historyBuffer.numOfCommandsInMem - 1 || hist_index > 15) {
+          hist_index = hist_index % historyBuffer.numOfCommandsInMem - 1;
+          break;
+      }
+      for (int i = 0; i < historyBuffer.lengthArr[index]; i++) {
+          int cc = historyBuffer.bufferArr[index][i];
+          cc = (cc == '\r') ? '\n' : cc;
+          cons.buf[cons.e++ % INPUT_BUF] = cc;
+          consputc(cc);
+          historyBuffer.currentCommand[commandLength] = cc;
+          commandLength++;
+      }
+      break;
+
+
   case C('U'):  // Kill line.
     while(cons.e != cons.w &&
           cons.buf[(cons.e-1) % INPUT_BUF_SIZE] != '\n'){
@@ -153,6 +237,7 @@ consoleintr(int c)
     if(cons.e != cons.w){
       cons.e--;
       consputc(BACKSPACE);
+      commandLength--;
     }
     break;
   default:
@@ -161,13 +246,15 @@ consoleintr(int c)
 
       // echo back to the user.
       consputc(c);
-
+      historyBuffer.currentCommand[commandLength] = c;
+      commandLength++;
       // store for consumption by consoleread().
       cons.buf[cons.e++ % INPUT_BUF_SIZE] = c;
 
       if(c == '\n' || c == C('D') || cons.e-cons.r == INPUT_BUF_SIZE){
         // wake up consoleread() if a whole line (or end-of-file)
         // has arrived.
+        saveCommand();
         cons.w = cons.e;
         wakeup(&cons.r);
       }
